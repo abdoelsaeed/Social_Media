@@ -3,11 +3,12 @@ const Comment = require("./../models/CommentModel");
 const Post = require("./../models/PostModel");
 const AppError = require("./../middlewares/AppError");
 const catchAsync = require("./../middlewares/catchAsync");
-
+const Email = require("./../middlewares/Email");
+//  user=>اللي هيتبعتله الاميل await new Email(user, "").sendNotification(user.username, "comment you💬");   user.username => الشخص اللي عامل لوج ان
 exports.createComment = catchAsync(async (req, res, next) => {
     const postId = req.params.postId;
     const userId = req.user._id;
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).populate('user','username email');
     if (!post) return next(new AppError("Post not found", 404));
     const user = await User.findById(userId);
     if (!user) return next(new AppError("User not found", 404));
@@ -18,6 +19,10 @@ exports.createComment = catchAsync(async (req, res, next) => {
     });
     post.comments.push(comment);
     await post.save({validateBeforeSave:false});
+    await new Email(user, "").sendNotification(
+    user.username,
+    "comment you💬"
+    );
     res.status(201).json({
         status: "success",
         data: {
@@ -28,7 +33,9 @@ exports.createComment = catchAsync(async (req, res, next) => {
 exports.createReplay = catchAsync(async (req, res, next) => {
     const commentId = req.params.commentId;
     const userId = req.user._id;
-    const comment = await Comment.findById(commentId);
+    const user = await User.findById(userId);
+
+    const comment = await Comment.findById(commentId).populate('user','email');
     if (!comment) return next(new AppError("Comment not found", 404));
     const Objectreplay = {
         user: userId,
@@ -36,6 +43,7 @@ exports.createReplay = catchAsync(async (req, res, next) => {
     }
     comment.replies.push(Objectreplay);
     await comment.save({validateBeforeSave:false});
+    await new Email(comment.user, "").sendNotification(user.username, "reply on your comment💬");
     res.status(201).json({
       status: "success",
       message: "Replay saved successfully",
@@ -116,7 +124,6 @@ exports.deleteComment = catchAsync(async (req, res, next) => {
 exports.deleteReplay = catchAsync(async (req, res, next) => {
     const commentId = req.params.commentId;
     const replayId = req.params.replayId;
-    const userId = req.user._id;
     const comment = await Comment.findById(commentId);
     if(!comment) return next(new AppError("not found comment", 404));
     comment.replies = comment.replies.filter(
@@ -131,13 +138,20 @@ exports.deleteReplay = catchAsync(async (req, res, next) => {
 exports.createLikeComment = catchAsync(async (req, res, next) => {
     const commentId = req.params.commentId;
     const userId = req.user._id;
-    const comment = await Comment.findById(commentId);
+    const user = await User.findById(userId);
+    const comment = await Comment.findById(commentId).populate('user','email');
     if (!comment) return next(new AppError("Comment not found", 404));
     if (comment.likes.includes(userId)) {
-      throw new CustomError("You have already liked this comment", 400);
+        return next(new AppError("You have already liked this comment", 400));
     }
     comment.likes.push(userId);
     await comment.save({validateBeforeSave: false});
+
+    await new Email(comment.user, "").sendNotification(
+      user.username,
+      "Like on your comment👍"
+    );
+
     res.status(200).json({
       status: "success",
       message: 'Like Created'
@@ -160,7 +174,8 @@ exports.createlikeReplay = catchAsync(async (req, res, next) => {
     const commentId = req.params.commentId;
     const replyId = req.params.replayId;
     const userId = req.user._id;
-    const comment = await Comment.findById(commentId);
+    const user = await User.findById(userId);
+    const comment = await Comment.findById(commentId).populate('user','email');
     if (!comment) return next(new AppError("Comment not found", 404));
     const replyComment = comment.replies.find(
       (reply) => reply.id.toString() === replyId
@@ -170,6 +185,10 @@ exports.createlikeReplay = catchAsync(async (req, res, next) => {
       return next(new AppError("You are like this replay already", 404)); 
     replyComment.likes.push(userId);
     await comment.save({ validateBeforeSave: false });
+    await new Email(comment.user, "").sendNotification(
+      user.username,
+      "Like on your reply comment👍"
+    );
     res.status(200).json({
       status: "success",
       message:'DONE! Like Reply'
